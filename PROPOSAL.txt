@@ -1,0 +1,91 @@
+Here is the proposed architectural design and implementation plan for your local Federated Identity and Access Management system.
+
+1. Solution Layout & Projects
+text
+Federated/
+├── Federated.sln
+├── src/
+│   ├── Common/
+│   │   └── Federated.Common/          # Shared DTOs, X-WOW-Transaction-Id correlation middleware
+│   ├── AuthService/
+│   │   └── Federated.AuthService/     # Central Auth API: /oauth/token, /.well-known/jwks.json,
+│   │                                  # /check, Admin CRUD endpoints, EF Core SQLite
+│   ├── TestApis/
+│   │   ├── Federated.OrdersApi/       # Orders API (e.g. orders.read, orders.write)
+│   │   ├── Federated.CustomersApi/    # Customers API (e.g. customers.read)
+│   │   └── Federated.InventoryApi/    # Inventory API (e.g. inventory.read, inventory.write)
+│   ├── TestClient/
+│   │   └── Federated.TestClient/      # Console runner: simulates API A calling other APIs
+│   │                                  # with token caching & transaction correlation ID
+│   └── AdminUI/                       # React 18 + TypeScript + Vite + Tailwind/Clean CSS
+├── tests/
+│   └── Federated.AuthService.Tests/   # Unit & integration tests (grants & token validation)
+└── scripts/
+    ├── run-all.ps1                    # Launches all services and UI with one command
+    └── stop-all.ps1                   # Graceful shutdown
+
+Proposed Port Allocations:
+
+AuthService: http://localhost:5001
+OrdersApi: http://localhost:5002
+CustomersApi: http://localhost:5003
+InventoryApi: http://localhost:5004
+AdminUI: http://localhost:5173
+2. Data Model (SQLite via EF Core)
+
+All entities use soft-disable (IsActive = false) rather than hard deletes.
+
+Secret hashing: Secrets are hashed with PBKDF2/Argon2 (or standard PasswordHasher<T>). Raw secrets are returned once upon generation/rotation.
+Database provider: Configured with EF Core SQLite, abstracted to allow swapping to PostgreSQL (UseNpgsql) with a simple configuration switch.
+3. Endpoints Overview
+AuthService (http://localhost:5001)
+Tokens & Discovery:
+POST /oauth/token – OAuth 2.0 Client Credentials Grant (grant_type=client_credentials, client_id, client_secret, optional scope / audience).
+GET /.well-known/jwks.json – JWKS endpoint publishing RSA public keys (RFC 7517).
+GET /.well-known/openid-configuration – Discovery document.
+Evaluation Mode:
+POST /check – { clientId, apiAudience, route, method } returns { allowed: bool, reason: string }.
+Admin Management:
+/admin/clients (List, Create, Disable, Rotate Secret)
+/admin/apis and /admin/permissions (List, Create, Edit, Disable)
+/admin/grants (List matrix, Update grants with diff check)
+/admin/audit (Audit log query)
+Test APIs (5002, 5003, 5004)
+OrdersApi: GET /orders, POST /orders, GET /orders/{id} (scopes: orders.read, orders.write).
+CustomersApi: GET /customers, GET /customers/{id} (scope: customers.read).
+InventoryApi: GET /inventory, PUT /inventory/{id} (scopes: inventory.read, inventory.write).
+Each API supports AuthMode: "Jwt" (default local JWKS signature/scope validation) or AuthMode: "CentralCheck" (calls POST /check).
+AdminUI (React + TS + Vite)
+Clients: Table, Create modal (reveals secret once), Disable button, Rotate secret modal.
+APIs & Permissions: Hierarchy view of APIs and their registered scopes.
+Access Matrix: Grid where Clients = rows, Permissions = columns; toggling prompts a diff confirmation modal before applying.
+Access Checker: Playground to test if a given client can execute a specific method/route on an API.
+Audit Log: Chronological event feed with before/after diffs.
+4. Implementation Steps
+Step 2a: AuthService Core
+SQLite DB + EF Core schema & migrations.
+RSA Key pair generation and memory/file storage.
+GET /.well-known/jwks.json and POST /oauth/token (OAuth2 client credentials, issuing signed JWT with granted scopes).
+X-WOW-Transaction-Id middleware.
+Step 2b: First Test API (OrdersApi)
+Minimal API with JWT Bearer validation against AuthService JWKS (http://localhost:5001/.well-known/jwks.json).
+Scope authorization policy enforcement.
+Step 2c: Test Client Console Runner
+Implements "API A" calling OrdersApi.
+Tests: valid token (200 OK), missing token (401 Unauthorized), insufficient scope (403 Forbidden).
+In-memory token caching until expiry; logs propagated X-WOW-Transaction-Id.
+Step 2d: The Other Test APIs (CustomersApi, InventoryApi)
+Spin up the remaining two services with respective routes and scopes.
+Step 2e: Admin APIs & Admin UI
+Implement Admin CRUD endpoints with audit logging.
+Build React + Vite Admin UI with all 5 screens.
+Step 2f: OneLogin Authentication & Fallback Mock OIDC
+Implement OIDC Authorization Code Flow with PKCE in AdminUI.
+Role-based access control: check access-admin role/claim for edit operations; read-only fallback.
+Provide a built-in Local Mock OIDC provider in AuthService so you can run and verify everything without an external OneLogin tenant.
+Step 2g: /check Mode & Mode Switch
+Implement POST /check in AuthService.
+Add switch (AuthMode: "Jwt" vs "CentralCheck") in test APIs and demonstrate comparative behavior.
+Automated Tests & Production Comparison
+Tests for grant logic, scope resolution, and token validation.
+Production readiness review (key rotation, rate limiting, HSM/KMS, mTLS, HTTPS, etc.).

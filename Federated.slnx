@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/AuthService/">
+    <Project Path="src/AuthService/Federated.AuthService/Federated.AuthService.csproj" />
+  </Folder>
+  <Folder Name="/src/Common/">
+    <Project Path="src/Common/Federated.Common/Federated.Common.csproj" />
+  </Folder>
+  <Folder Name="/src/TestApis/">
+    <Project Path="src/TestApis/Federated.CustomersApi/Federated.CustomersApi.csproj" />
+    <Project Path="src/TestApis/Federated.InventoryApi/Federated.InventoryApi.csproj" />
+    <Project Path="src/TestApis/Federated.OrdersApi/Federated.OrdersApi.csproj" />
+  </Folder>
+  <Folder Name="/src/TestClient/">
+    <Project Path="src/TestClient/Federated.TestClient/Federated.TestClient.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Federated.AuthService.Tests/Federated.AuthService.Tests.csproj" />
+  </Folder>
+</Solution>

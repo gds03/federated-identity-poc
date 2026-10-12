@@ -34,6 +34,12 @@ Start-Process cmd.exe -ArgumentList "/c title InventoryApi (5004) && dotnet run 
 # 4. Start AdminUI
 Write-Host "`n[4/5] Starting Admin UI on http://localhost:5173..." -ForegroundColor Yellow
 $uiDir = "$root/src/AdminUI"
+if (!(Test-Path "$uiDir/node_modules")) {
+    Write-Host "Installing Admin UI dependencies (npm install)..." -ForegroundColor Yellow
+    Push-Location $uiDir
+    npm.cmd install
+    Pop-Location
+}
 Start-Process cmd.exe -ArgumentList "/c title AdminUI (5173) && npm.cmd run dev" -WorkingDirectory $uiDir
 
 Start-Sleep -Seconds 3

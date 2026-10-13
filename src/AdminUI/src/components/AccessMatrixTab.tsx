@@ -11,7 +11,7 @@ interface PendingToggle {
 }
 
 export const AccessMatrixTab: React.FC = () => {
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, token } = useAuth();
   const [data, setData] = useState<MatrixData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export const AccessMatrixTab: React.FC = () => {
 
   useEffect(() => {
     loadMatrix();
-  }, []);
+  }, [token]);
 
   const isGranted = (clientId: string, permissionId: string): boolean => {
     if (!data) return false;

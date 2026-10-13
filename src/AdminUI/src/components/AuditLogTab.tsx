@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '../api';
 import type { AuditLogItem } from '../types';
+import { useAuth } from '../auth/AuthContext';
 import { RefreshCw, FileText, User } from 'lucide-react';
 
 export const AuditLogTab: React.FC = () => {
+  const { token } = useAuth();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export const AuditLogTab: React.FC = () => {
 
   useEffect(() => {
     loadLogs();
-  }, []);
+  }, [token]);
 
   const getActionBadgeClass = (action: string) => {
     if (action.includes('CREATE') || action.includes('GRANT')) return 'badge-success';

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '../api';
 import type { ClientItem, ApiItem, AccessCheckResult } from '../types';
+import { useAuth } from '../auth/AuthContext';
 import { Search, ShieldCheck, ShieldAlert, Cpu } from 'lucide-react';
 
 export const AccessCheckerTab: React.FC = () => {
+  const { token } = useAuth();
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [apis, setApis] = useState<ApiItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,7 +36,7 @@ export const AccessCheckerTab: React.FC = () => {
       }
     };
     init();
-  }, []);
+  }, [token]);
 
   const handleEvaluate = async (e: React.FormEvent) => {
     e.preventDefault();

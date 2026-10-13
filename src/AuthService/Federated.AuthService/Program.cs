@@ -38,6 +38,33 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Authentication & Authorization for Admin Endpoints
+builder.Services.AddAuthentication("AdminBearer")
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, AdminAuthHandler>("AdminBearer", null);
+
+builder.Services.AddAuthorization(options =>
+{
+    // Read Policy: allows any authenticated user (viewers and admins)
+    options.AddPolicy(AdminPolicies.Read, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+    });
+
+    // Write Policy: strictly enforces 'access-admin' role/group or 'admin-access' scope
+    options.AddPolicy(AdminPolicies.Write, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+        {
+            var user = ctx.User;
+            return user.Claims.Any(c =>
+                (c.Type is "roles" or "groups" or "role" or "https://federated.internal/roles"
+                 && c.Value.Equals("access-admin", StringComparison.OrdinalIgnoreCase)) ||
+                (c.Type == "scope" && c.Value.Split(' ').Contains("admin-access", StringComparer.OrdinalIgnoreCase)));
+        });
+    });
+});
+
 var app = builder.Build();
 
 // Ensure DB is seeded
@@ -51,6 +78,8 @@ using (var scope = app.Services.CreateScope())
 // Middleware
 app.UseCors();
 app.UseTransactionId();
+app.UseAuthentication();
+app.UseAuthorization();
 
 string issuer = builder.Configuration["AuthService:Issuer"] ?? "http://localhost:5001";
 

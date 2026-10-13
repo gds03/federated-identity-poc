@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { KeyRound, Plus, ShieldCheck, ShieldAlert, RefreshCw, Copy, Check, Eye, Lock } from 'lucide-react';
 
 export const ClientsTab: React.FC = () => {
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, token } = useAuth();
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export const ClientsTab: React.FC = () => {
 
   useEffect(() => {
     loadClients();
-  }, []);
+  }, [token]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

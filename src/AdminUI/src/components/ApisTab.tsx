@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Server, Plus, RefreshCw, Key, Globe, Lock } from 'lucide-react';
 
 export const ApisTab: React.FC = () => {
-  const { isReadOnly } = useAuth();
+  const { isReadOnly, token } = useAuth();
   const [apis, setApis] = useState<ApiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export const ApisTab: React.FC = () => {
 
   useEffect(() => {
     loadApis();
-  }, []);
+  }, [token]);
 
   const handleCreateApi = async (e: React.FormEvent) => {
     e.preventDefault();

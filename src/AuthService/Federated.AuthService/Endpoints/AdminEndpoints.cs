@@ -40,7 +40,7 @@ public static class AdminEndpoints
                 .ToListAsync();
 
             return Results.Ok(clients);
-        });
+        }).RequireAuthorization(AdminPolicies.Read);
 
         group.MapPost("/clients", async (CreateClientDto dto, AuthDbContext db, ISecretHasher hasher) =>
         {
@@ -89,7 +89,7 @@ public static class AdminEndpoints
                 client.CreatedAtUtc,
                 RawSecret = rawSecret // Only exposed at creation
             });
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         group.MapPost("/clients/{id}/toggle-status", async (string id, StatusToggleDto dto, AuthDbContext db) =>
         {
@@ -110,7 +110,7 @@ public static class AdminEndpoints
 
             await db.SaveChangesAsync();
             return Results.Ok(new { client.Id, client.ClientId, client.IsActive });
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         group.MapPost("/clients/{id}/rotate-secret", async (string id, ActorDto dto, AuthDbContext db, ISecretHasher hasher) =>
         {
@@ -139,7 +139,7 @@ public static class AdminEndpoints
                 client.ClientId,
                 RawSecret = newRawSecret // Only shown once upon rotation
             });
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         // ==========================================
         // 2. APIS & PERMISSIONS
@@ -167,7 +167,7 @@ public static class AdminEndpoints
                 .ToListAsync();
 
             return Results.Ok(apis);
-        });
+        }).RequireAuthorization(AdminPolicies.Read);
 
         group.MapPost("/apis", async (CreateApiDto dto, AuthDbContext db) =>
         {
@@ -202,7 +202,7 @@ public static class AdminEndpoints
 
             await db.SaveChangesAsync();
             return Results.Created($"/api/admin/apis/{api.Id}", api);
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         group.MapPut("/apis/{id}", async (string id, UpdateApiDto dto, AuthDbContext db) =>
         {
@@ -224,7 +224,7 @@ public static class AdminEndpoints
 
             await db.SaveChangesAsync();
             return Results.Ok(api);
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         group.MapPost("/apis/{id}/permissions", async (string id, CreatePermissionDto dto, AuthDbContext db) =>
         {
@@ -262,7 +262,7 @@ public static class AdminEndpoints
 
             await db.SaveChangesAsync();
             return Results.Created($"/api/admin/permissions/{perm.Id}", perm);
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         group.MapPut("/permissions/{id}", async (string id, UpdatePermissionDto dto, AuthDbContext db) =>
         {
@@ -283,7 +283,7 @@ public static class AdminEndpoints
 
             await db.SaveChangesAsync();
             return Results.Ok(perm);
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         // ==========================================
         // 3. ACCESS MATRIX
@@ -315,7 +315,7 @@ public static class AdminEndpoints
                 .ToListAsync();
 
             return Results.Ok(new { clients, permissions, grants });
-        });
+        }).RequireAuthorization(AdminPolicies.Read);
 
         group.MapPost("/matrix/toggle", async (ToggleGrantDto dto, AuthDbContext db) =>
         {
@@ -382,7 +382,7 @@ public static class AdminEndpoints
                 dto.PermissionId,
                 dto.Enable
             });
-        });
+        }).RequireAuthorization(AdminPolicies.Write);
 
         // ==========================================
         // 4. ACCESS CHECKER
@@ -457,7 +457,7 @@ public static class AdminEndpoints
                 Reason: $"Access allowed. Client holds valid grant for scope '{requiredScope}'.",
                 RequiredScope: requiredScope,
                 ClientScopes: clientActiveScopes));
-        });
+        }).RequireAuthorization(AdminPolicies.Read);
 
         // ==========================================
         // 5. AUDIT LOG
@@ -470,7 +470,7 @@ public static class AdminEndpoints
                 .ToListAsync();
 
             return Results.Ok(logs);
-        });
+        }).RequireAuthorization(AdminPolicies.Read);
 
         return app;
     }

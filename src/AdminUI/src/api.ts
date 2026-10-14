@@ -2,6 +2,8 @@ import type {
   ClientItem,
   ClientCreatedResult,
   ApiItem,
+  RouteItem,
+  ClientRoutesResult,
   MatrixData,
   AccessCheckResult,
   AuditLogItem,
@@ -87,6 +89,31 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ scope, description, actor }),
     }),
+
+    // Routes (which route of an API requires which permission)
+  createRoute: (
+    apiId: string,
+    method: string,
+    pathPattern: string,
+    permissionId: string | null,
+    description: string,
+    actor = getCurrentActor()
+  ) =>
+    fetchJson<RouteItem>(`${BASE_URL}/apis/${apiId}/routes`, {
+      method: 'POST',
+      body: JSON.stringify({ method, pathPattern, permissionId, description, actor }),
+    }),
+  updateRoute: (
+    id: string,
+    route: { method: string; pathPattern: string; permissionId: string | null; description: string; isActive: boolean },
+    actor = getCurrentActor()
+  ) =>
+    fetchJson<RouteItem>(`${BASE_URL}/routes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...route, actor }),
+    }),
+  getClientRoutes: (clientInternalId: string) =>
+    fetchJson<ClientRoutesResult>(`${BASE_URL}/clients/${clientInternalId}/routes`),
 
   // Access Matrix
   getMatrix: () => fetchJson<MatrixData>(`${BASE_URL}/matrix`),

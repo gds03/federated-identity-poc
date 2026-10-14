@@ -182,6 +182,12 @@ export const AccessCheckerTab: React.FC = () => {
                   <span className="detail-value font-medium">{result.reason}</span>
                 </div>
                 <div className="detail-item">
+                  <span className="detail-label">Matched Route:</span>
+                  <span className="detail-value mono">
+                    {result.matchedRoute ?? 'None (no registered route matches; denied by default)'}
+                  </span>
+                </div>
+                <div className="detail-item">
                   <span className="detail-label">Required Scope:</span>
                   <span className="detail-value mono font-bold text-accent">{result.requiredScope}</span>
                 </div>

@@ -12,6 +12,7 @@ public class AuthDbContext : DbContext
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Api> Apis => Set<Api>();
     public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<ApiRoute> ApiRoutes => Set<ApiRoute>();
     public DbSet<Grant> Grants => Set<Grant>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
@@ -46,6 +47,24 @@ public class AuthDbContext : DbContext
                   .WithMany(a => a.Permissions)
                   .HasForeignKey(e => e.ApiId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ApiRoute>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.ApiId, e.Method, e.PathPattern }).IsUnique();
+            entity.Property(e => e.Method).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.PathPattern).IsRequired().HasMaxLength(300);
+
+            entity.HasOne(e => e.Api)
+                  .WithMany(a => a.Routes)
+                  .HasForeignKey(e => e.ApiId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Permission)
+                  .WithMany(p => p.Routes)
+                  .HasForeignKey(e => e.PermissionId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Grant>(entity =>

@@ -25,6 +25,7 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 builder.Services.AddSingleton<ISecretHasher, SecretHasher>();
 builder.Services.AddSingleton<IRsaKeyService, RsaKeyService>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddScoped<IRouteAccessEvaluator, RouteAccessEvaluator>();
 
 // CORS for local React Admin UI
 builder.Services.AddCors(options =>

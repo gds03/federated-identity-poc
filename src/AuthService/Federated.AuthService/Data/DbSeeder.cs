@@ -11,12 +11,12 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(AuthDbContext db, ISecretHasher hasher)
     {
-                await db.Database.EnsureCreatedAsync();
+        await db.Database.EnsureCreatedAsync();
 
         if (await db.Apis.AnyAsync())
         {
             return; // Already seeded
-                }
+        }
 
         // 1. APIs
         var ordersApi = new Api
@@ -100,42 +100,21 @@ public static class DbSeeder
             DetailsJson = "{\"message\":\"Initial seed of default APIs, permissions, and clients created.\"}"
         });
 
-                        // 6. Routes exposed by the sample APIs, each tied to the scope it requires
-        var defaults = new (string Audience, string Method, string Path, string? Scope, string Description)[]
-        {
-            ("https://orders.internal", "GET", "/health", null, "Health check (public)"),
-            ("https://orders.internal", "GET", "/orders", "orders.read", "List orders"),
-            ("https://orders.internal", "GET", "/orders/{id}", "orders.read", "Get one order"),
-            ("https://orders.internal", "POST", "/orders", "orders.write", "Create an order"),
+                                // 6. Routes exposed by the sample APIs, each tied to the scope it requires (null = public)
+        db.ApiRoutes.AddRange(
+            new ApiRoute { ApiId = ordersApi.Id, Method = "GET", PathPattern = "/health", PermissionId = null, Description = "Health check (public)" },
+            new ApiRoute { ApiId = ordersApi.Id, Method = "GET", PathPattern = "/orders", PermissionId = permOrdersRead.Id, Description = "List orders" },
+            new ApiRoute { ApiId = ordersApi.Id, Method = "GET", PathPattern = "/orders/{id}", PermissionId = permOrdersRead.Id, Description = "Get one order" },
+            new ApiRoute { ApiId = ordersApi.Id, Method = "POST", PathPattern = "/orders", PermissionId = permOrdersWrite.Id, Description = "Create an order" },
 
-            ("https://customers.internal", "GET", "/health", null, "Health check (public)"),
-            ("https://customers.internal", "GET", "/customers", "customers.read", "List customers"),
-            ("https://customers.internal", "GET", "/customers/{id}", "customers.read", "Get one customer"),
+            new ApiRoute { ApiId = customersApi.Id, Method = "GET", PathPattern = "/health", PermissionId = null, Description = "Health check (public)" },
+            new ApiRoute { ApiId = customersApi.Id, Method = "GET", PathPattern = "/customers", PermissionId = permCustRead.Id, Description = "List customers" },
+            new ApiRoute { ApiId = customersApi.Id, Method = "GET", PathPattern = "/customers/{id}", PermissionId = permCustRead.Id, Description = "Get one customer" },
 
-            ("https://inventory.internal", "GET", "/health", null, "Health check (public)"),
-            ("https://inventory.internal", "GET", "/inventory", "inventory.read", "List inventory"),
-            ("https://inventory.internal", "PUT", "/inventory/{id}", "inventory.write", "Update stock level"),
-        };
-
-                var apis = new[] { ordersApi, customersApi, inventoryApi }.ToDictionary(a => a.Audience);
-        var permissions = new[] { permOrdersRead, permOrdersWrite, permCustRead, permInvRead, permInvWrite };
-
-        foreach (var d in defaults)
-        {
-            var api = apis[d.Audience];
-            string? permissionId = d.Scope == null
-                ? null
-                : permissions.Single(p => p.ApiId == api.Id && p.Scope == d.Scope).Id;
-
-            db.ApiRoutes.Add(new ApiRoute
-            {
-                ApiId = api.Id,
-                Method = d.Method,
-                PathPattern = d.Path,
-                PermissionId = permissionId,
-                Description = d.Description
-            });
-        }
+            new ApiRoute { ApiId = inventoryApi.Id, Method = "GET", PathPattern = "/health", PermissionId = null, Description = "Health check (public)" },
+            new ApiRoute { ApiId = inventoryApi.Id, Method = "GET", PathPattern = "/inventory", PermissionId = permInvRead.Id, Description = "List inventory" },
+            new ApiRoute { ApiId = inventoryApi.Id, Method = "PUT", PathPattern = "/inventory/{id}", PermissionId = permInvWrite.Id, Description = "Update stock level" }
+        );
 
         await db.SaveChangesAsync();
     }

@@ -11,16 +11,12 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(AuthDbContext db, ISecretHasher hasher)
     {
-        await db.Database.EnsureCreatedAsync();
-        await EnsureRouteTableAsync(db);
+                await db.Database.EnsureCreatedAsync();
 
         if (await db.Apis.AnyAsync())
         {
-            // Already seeded; make sure databases created before routes existed get the default route registry.
-            await SeedDefaultRoutesAsync(db);
-            return;
-        }
-
+            return; // Already seeded
+                }
 
         // 1. APIs
         var ordersApi = new Api
@@ -104,46 +100,7 @@ public static class DbSeeder
             DetailsJson = "{\"message\":\"Initial seed of default APIs, permissions, and clients created.\"}"
         });
 
-                await db.SaveChangesAsync();
-
-        await SeedDefaultRoutesAsync(db);
-    }
-
-    /// <summary>
-    /// The project uses EnsureCreated (no migrations), which never alters an existing database.
-    /// For SQLite databases created before the route registry existed, create the missing table.
-    /// </summary>
-    private static async Task EnsureRouteTableAsync(AuthDbContext db)
-    {
-        if (!db.Database.IsSqlite()) return;
-
-        await db.Database.ExecuteSqlRawAsync(@"
-CREATE TABLE IF NOT EXISTS ""ApiRoutes"" (
-    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_ApiRoutes"" PRIMARY KEY,
-    ""ApiId"" TEXT NOT NULL,
-    ""Method"" TEXT NOT NULL,
-    ""PathPattern"" TEXT NOT NULL,
-    ""PermissionId"" TEXT NULL,
-    ""Description"" TEXT NOT NULL,
-    ""IsActive"" INTEGER NOT NULL,
-    CONSTRAINT ""FK_ApiRoutes_Apis_ApiId"" FOREIGN KEY (""ApiId"") REFERENCES ""Apis"" (""Id"") ON DELETE CASCADE,
-    CONSTRAINT ""FK_ApiRoutes_Permissions_PermissionId"" FOREIGN KEY (""PermissionId"") REFERENCES ""Permissions"" (""Id"") ON DELETE RESTRICT
-)");
-
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ApiRoutes_ApiId_Method_PathPattern\" ON \"ApiRoutes\" (\"ApiId\", \"Method\", \"PathPattern\")");
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS \"IX_ApiRoutes_PermissionId\" ON \"ApiRoutes\" (\"PermissionId\")");
-    }
-
-    /// <summary>
-    /// Registers the routes exposed by the three sample APIs, each tied to the scope it requires.
-    /// Only runs while the route registry is empty, so admin edits are never overwritten.
-    /// </summary>
-    private static async Task SeedDefaultRoutesAsync(AuthDbContext db)
-    {
-        if (await db.ApiRoutes.AnyAsync()) return;
-
+                        // 6. Routes exposed by the sample APIs, each tied to the scope it requires
         var defaults = new (string Audience, string Method, string Path, string? Scope, string Description)[]
         {
             ("https://orders.internal", "GET", "/health", null, "Health check (public)"),
@@ -160,20 +117,15 @@ CREATE TABLE IF NOT EXISTS ""ApiRoutes"" (
             ("https://inventory.internal", "PUT", "/inventory/{id}", "inventory.write", "Update stock level"),
         };
 
-        var apis = await db.Apis.ToDictionaryAsync(a => a.Audience);
-        var permissions = await db.Permissions.ToListAsync();
+                var apis = new[] { ordersApi, customersApi, inventoryApi }.ToDictionary(a => a.Audience);
+        var permissions = new[] { permOrdersRead, permOrdersWrite, permCustRead, permInvRead, permInvWrite };
 
         foreach (var d in defaults)
         {
-            if (!apis.TryGetValue(d.Audience, out var api)) continue;
-
-            string? permissionId = null;
-            if (d.Scope != null)
-            {
-                var perm = permissions.FirstOrDefault(p => p.ApiId == api.Id && p.Scope == d.Scope);
-                if (perm == null) continue;
-                permissionId = perm.Id;
-            }
+            var api = apis[d.Audience];
+            string? permissionId = d.Scope == null
+                ? null
+                : permissions.Single(p => p.ApiId == api.Id && p.Scope == d.Scope).Id;
 
             db.ApiRoutes.Add(new ApiRoute
             {
@@ -184,17 +136,6 @@ CREATE TABLE IF NOT EXISTS ""ApiRoutes"" (
                 Description = d.Description
             });
         }
-
-                if (!db.ChangeTracker.Entries<ApiRoute>().Any()) return;
-
-        db.AuditEntries.Add(new AuditEntry
-        {
-            Actor = "system-seeder",
-            Action = "SEED_ROUTES",
-            EntityType = "System",
-            EntityId = "seed-routes",
-            DetailsJson = "{\"message\":\"Initial route registry created for the sample APIs.\"}"
-        });
 
         await db.SaveChangesAsync();
     }

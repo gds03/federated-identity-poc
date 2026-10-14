@@ -428,3 +428,4 @@ FodyWeavers.xsd
 #*.lscache
 
 FederatedAuth.db
+FederatedAuth.db**

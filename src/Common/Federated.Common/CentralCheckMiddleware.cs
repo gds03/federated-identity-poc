@@ -55,9 +55,8 @@ public class CentralCheckMiddleware
         }
 
         string authHeader = context.Request.Headers.Authorization.ToString();
-        string clientIdHeader = context.Request.Headers["X-Client-Id"].ToString();
 
-        if (string.IsNullOrWhiteSpace(authHeader) && string.IsNullOrWhiteSpace(clientIdHeader))
+        if (string.IsNullOrWhiteSpace(authHeader))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             context.Response.ContentType = "application/json";
@@ -80,7 +79,6 @@ public class CentralCheckMiddleware
         // Forward authorization check to central AuthService
         var checkPayload = new
         {
-            clientId = string.IsNullOrWhiteSpace(clientIdHeader) ? null : clientIdHeader,
             token = authHeader,
             audience = _audience,
             route = path,

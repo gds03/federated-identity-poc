@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -14,8 +12,6 @@ using Federated.Common;
 namespace Federated.AuthService.Endpoints;
 
 public record CheckRequest(
-    [property: JsonPropertyName("client_id")] string? ClientId,
-    [property: JsonPropertyName("clientId")] string? ClientIdAlt,
     [property: JsonPropertyName("token")] string? Token,
     [property: JsonPropertyName("audience")] string? Audience,
     [property: JsonPropertyName("apiAudience")] string? ApiAudienceAlt,
@@ -37,6 +33,7 @@ public static class CheckEndpoints
         app.MapPost("/check", async (
             CheckRequest req,
             IRouteAccessEvaluator evaluator,
+            ICheckTokenValidator tokenValidator,
             HttpContext httpContext,
             ILogger<Program> logger) =>
         {
@@ -51,50 +48,31 @@ public static class CheckEndpoints
             logger.LogInformation("[CorrelationId: {CorrelationId}] Evaluating central authorization check for Route: {Route}, Method: {Method}",
                 correlationId, req.Route, req.Method);
 
-            string? effectiveClientId = req.ClientId ?? req.ClientIdAlt;
-            string targetAudience = req.Audience ?? req.ApiAudienceAlt ?? string.Empty;
-
-            // If a token was provided, decode client_id (and audience, if not given explicitly) from it
-            if (!string.IsNullOrWhiteSpace(req.Token) &&
-                (string.IsNullOrWhiteSpace(effectiveClientId) || string.IsNullOrWhiteSpace(targetAudience)))
-            {
-                try
-                {
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwt = handler.ReadJwtToken(req.Token.Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase).Trim());
-
-                    if (string.IsNullOrWhiteSpace(effectiveClientId))
-                    {
-                        effectiveClientId = jwt.Claims.FirstOrDefault(c => c.Type == "client_id")?.Value
-                                         ?? jwt.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(targetAudience) && jwt.Audiences.Count() == 1)
-                    {
-                        targetAudience = jwt.Audiences.First();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning("[CorrelationId: {CorrelationId}] Failed to parse provided token in /check: {Message}", correlationId, ex.Message);
-                    return Results.Ok(new CheckResponse(
-                        Allowed: false,
-                        Reason: "Invalid or malformed Bearer token.",
-                        ClientId: "unknown",
-                        RequiredScope: "unknown",
-                        ClientScopes: Array.Empty<string>()));
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(effectiveClientId))
+            // The caller identity comes only from a verified token. client_id / X-Client-Id values are never trusted.
+            if (string.IsNullOrWhiteSpace(req.Token))
             {
                 return Results.Ok(new CheckResponse(
                     Allowed: false,
-                    Reason: "No client identification provided (missing client_id or token).",
+                    Reason: "A Bearer token is required.",
                     ClientId: "unknown",
                     RequiredScope: "unknown",
                     ClientScopes: Array.Empty<string>()));
             }
+
+            var tokenResult = tokenValidator.Validate(req.Token, req.Audience ?? req.ApiAudienceAlt);
+            if (!tokenResult.IsValid)
+            {
+                logger.LogWarning("[CorrelationId: {CorrelationId}] Rejected token in /check: {Error}", correlationId, tokenResult.Error);
+                return Results.Ok(new CheckResponse(
+                    Allowed: false,
+                    Reason: tokenResult.Error ?? "Invalid token.",
+                    ClientId: "unknown",
+                    RequiredScope: "unknown",
+                    ClientScopes: Array.Empty<string>()));
+            }
+
+            string effectiveClientId = tokenResult.ClientId!;
+            string targetAudience = tokenResult.Audience ?? string.Empty;
 
             if (string.IsNullOrWhiteSpace(req.Route) || string.IsNullOrWhiteSpace(req.Method))
             {

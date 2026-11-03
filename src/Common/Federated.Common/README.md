@@ -35,7 +35,7 @@ Shared library providing reusable middleware, authorization handlers, and contra
 - **Configured**: Called **once** on startup when `"AuthMode": "CentralCheck"`.
 - **On every request**:
   1. Skips anonymous `/health` routes.
-  2. Extracts the `Authorization` Bearer token or `X-Client-Id` header.
+  2. Requires the `Authorization` Bearer token (the `X-Client-Id` header is no longer accepted; identity comes only from the verified token).
   3. Sends `POST http://localhost:5001/check` carrying:
      ```json
      {

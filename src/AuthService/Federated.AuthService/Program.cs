@@ -26,6 +26,9 @@ builder.Services.AddSingleton<ISecretHasher, SecretHasher>();
 builder.Services.AddSingleton<IRsaKeyService, RsaKeyService>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddScoped<IRouteAccessEvaluator, RouteAccessEvaluator>();
+builder.Services.AddSingleton<ICheckTokenValidator>(sp => new CheckTokenValidator(
+    sp.GetRequiredService<IRsaKeyService>(),
+    builder.Configuration["AuthService:Issuer"] ?? "http://localhost:5001"));
 
 // CORS for local React Admin UI
 builder.Services.AddCors(options =>

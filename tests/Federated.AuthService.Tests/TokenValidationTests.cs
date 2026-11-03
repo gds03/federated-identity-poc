@@ -209,3 +209,57 @@ public class TokenValidationTests
         Assert.True(contextAllowed.HasSucceeded);
     }
 }
+
+public class CheckTokenValidatorTests
+{
+    private const string Issuer = "http://localhost:5001";
+    private const string Aud = "https://orders.internal";
+    private readonly IRsaKeyService _keys = new RsaKeyService(Path.Combine(Path.GetTempPath(), "fed_check_keys_" + Guid.NewGuid().ToString("N")));
+
+    private string Issue(IRsaKeyService keys, string issuer = Issuer) =>
+        new TokenService(keys).IssueAccessToken(issuer, "api-a", new[] { Aud }, new[] { "orders.read" }, TimeSpan.FromMinutes(5));
+
+    [Fact]
+    public void Accepts_ValidToken_AndExtractsClientAndAudience()
+    {
+        var result = new CheckTokenValidator(_keys, Issuer).Validate("Bearer " + Issue(_keys), Aud);
+        Assert.True(result.IsValid);
+        Assert.Equal("api-a", result.ClientId);
+        Assert.Equal(Aud, result.Audience);
+    }
+
+    [Fact]
+    public void Rejects_TokenSignedWithAnotherKey()
+    {
+        var attacker = new RsaKeyService(Path.Combine(Path.GetTempPath(), "fed_check_keys_" + Guid.NewGuid().ToString("N")));
+        var result = new CheckTokenValidator(_keys, Issuer).Validate(Issue(attacker), Aud);
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void Rejects_UnsignedForgedToken()
+    {
+        var forged = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+            Issuer, Aud, new[] { new Claim("client_id", "admin") }, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5)));
+        Assert.False(new CheckTokenValidator(_keys, Issuer).Validate(forged, Aud).IsValid);
+    }
+
+    [Fact]
+    public void Rejects_ExpiredToken()
+    {
+        var expired = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+            Issuer, Aud, new[] { new Claim("client_id", "api-a") },
+            DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow.AddMinutes(-5),
+            new SigningCredentials(_keys.GetSigningKey(), SecurityAlgorithms.RsaSha256)));
+        Assert.False(new CheckTokenValidator(_keys, Issuer).Validate(expired, Aud).IsValid);
+    }
+
+    [Fact]
+    public void Rejects_WrongIssuer_And_WrongAudience_And_Garbage()
+    {
+        var validator = new CheckTokenValidator(_keys, Issuer);
+        Assert.False(validator.Validate(Issue(_keys, issuer: "http://evil"), Aud).IsValid);
+        Assert.False(validator.Validate(Issue(_keys), "https://inventory.internal").IsValid);
+        Assert.False(validator.Validate("not-a-jwt", Aud).IsValid);
+    }
+}

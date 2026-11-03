@@ -429,3 +429,12 @@ FodyWeavers.xsd
 
 **FederatedAuth.db
 FederatedAuth.db**
+FederatedAuth.db
+
+# Local runtime artifacts (recreated by the seeder / key service)
+*.db
+*.db-shm
+*.db-wal
+keys/
+.env
+.env.local

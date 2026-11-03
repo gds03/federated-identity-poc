@@ -134,3 +134,11 @@ Each test API can be toggled between two architectural patterns in its `appsetti
   - `viewer`: Read-only access; all mutation controls are disabled with informative tooltips.
 - **Built-in Mock OIDC Provider**: Allows 1-click switching between Alice Admin and Bob Viewer directly in the navbar.
 - **OneLogin Integration**: Simply update `src/AdminUI/src/auth/oidcConfig.ts` with your OneLogin domain and Client ID to authenticate against real OneLogin.
+
+---
+
+## About this project
+
+This is a learning proof of concept, not production software. The idea came from the author; the implementation was generated with AI assistance. It has no rate limiting, a single static signing key without rotation, and runs over plain HTTP on localhost. The test secrets in the docs are demo values only.
+
+Licensed under the [MIT License](LICENSE).

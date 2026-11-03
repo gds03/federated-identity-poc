@@ -39,7 +39,7 @@ export function getSavedAuth0Domain(): string {
   return (
     localStorage.getItem(STORAGE_KEY_AUTH0_DOMAIN) ||
     import.meta.env.VITE_AUTH0_DOMAIN ||
-    'dev-taacleywsdh33h5b.us.auth0.com'
+    'your-tenant.us.auth0.com'
   );
 }
 

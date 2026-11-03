@@ -137,7 +137,7 @@ export const IdpSettingsModal: React.FC<IdpSettingsModalProps> = ({ isOpen, onCl
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. dev-taacleywsdh33h5b.us.auth0.com"
+                  placeholder="e.g. your-tenant.us.auth0.com"
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   required

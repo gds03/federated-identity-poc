@@ -23,7 +23,8 @@ public class Api
     public string Description { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
 
-    public List<Permission> Permissions { get; set; } = new();
+        public List<Permission> Permissions { get; set; } = new();
+    public List<ApiRoute> Routes { get; set; } = new();
 }
 
 public class Permission
@@ -36,7 +37,35 @@ public class Permission
     public string Description { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
 
-    public List<Grant> Grants { get; set; } = new();
+        public List<Grant> Grants { get; set; } = new();
+    public List<ApiRoute> Routes { get; set; } = new();
+}
+
+/// <summary>
+/// A route (HTTP method + path pattern) exposed by a registered API, and the permission (scope)
+/// a client must hold to call it. Routes are the unit that /check evaluates: a request is allowed
+/// only if it matches an active route AND the client holds the permission that route requires.
+/// A route with no PermissionId is public (any known, active client may call it).
+/// </summary>
+public class ApiRoute
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    public string ApiId { get; set; } = string.Empty;
+    public Api? Api { get; set; }
+
+    /// <summary>Upper-case HTTP method, or "*" for any method.</summary>
+    public string Method { get; set; } = "GET";
+
+    /// <summary>Path pattern, e.g. "/orders", "/orders/{id}", "/reports/**".</summary>
+    public string PathPattern { get; set; } = string.Empty;
+
+    /// <summary>Permission required to call this route. Null means the route is public.</summary>
+    public string? PermissionId { get; set; }
+    public Permission? Permission { get; set; }
+
+    public string Description { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
 }
 
 public class Grant

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '../api';
-import type { ClientItem } from '../types';
+import type { ClientItem, ClientRoutesResult } from '../types';
 import { useAuth } from '../auth/AuthContext';
-import { KeyRound, Plus, ShieldCheck, ShieldAlert, RefreshCw, Copy, Check, Eye, Lock } from 'lucide-react';
+import { KeyRound, Plus, ShieldCheck, ShieldAlert, RefreshCw, Copy, Check, Eye, Lock, Route as RouteIcon } from 'lucide-react';
 
 export const ClientsTab: React.FC = () => {
   const { isReadOnly, token } = useAuth();
@@ -19,6 +19,22 @@ export const ClientsTab: React.FC = () => {
   // Secret revelation modal
   const [revealedSecret, setRevealedSecret] = useState<{ clientId: string; secret: string; isNew: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Effective routes modal
+  const [clientRoutes, setClientRoutes] = useState<ClientRoutesResult | null>(null);
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+
+  const handleShowRoutes = async (client: ClientItem) => {
+    try {
+      setLoadingRoutes(true);
+      setClientRoutes(await adminApi.getClientRoutes(client.id));
+    } catch (err: any) {
+      alert(`Error loading routes: ${err.message}`);
+    } finally {
+      setLoadingRoutes(false);
+    }
+  };
+
 
   const loadClients = async () => {
     try {
@@ -152,7 +168,15 @@ export const ClientsTab: React.FC = () => {
                 </td>
                 <td className="text-muted text-sm">{new Date(c.createdAtUtc).toLocaleDateString()}</td>
                 <td className="text-right">
-                  <div className="btn-group">
+                                    <div className="btn-group">
+                    <button
+                      className="btn btn-sm btn-outline"
+                      title="View the routes this client may call"
+                      onClick={() => handleShowRoutes(c)}
+                      disabled={loadingRoutes}
+                    >
+                      <RouteIcon size={14} /> Routes
+                    </button>
                     <button
                       className="btn btn-sm btn-outline"
                       title={isReadOnly ? "Requires 'access-admin' role" : "Rotate Secret"}
@@ -220,6 +244,51 @@ export const ClientsTab: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Effective Routes Modal */}
+      {clientRoutes && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: 760, width: '90%' }}>
+            <h3>Routes for {clientRoutes.clientId}</h3>
+            <p className="text-muted text-sm mb-4">
+              Derived from this client's scope grants and the route registry. This is exactly what the central check enforces.
+              {!clientRoutes.isActive && <strong> This client is disabled, so every route is denied.</strong>}
+            </p>
+            <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>API</th>
+                    <th>Route</th>
+                    <th>Scope</th>
+                    <th>Access</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientRoutes.routes.map((r) => (
+                    <tr key={r.routeId} title={r.reason}>
+                      <td>{r.apiName}</td>
+                      <td><span className="mono">{r.method} {r.pathPattern}</span></td>
+                      <td><span className="mono text-sm">{r.scope ?? 'public'}</span></td>
+                      <td>
+                        {r.allowed
+                          ? <span className="badge badge-success">Allowed</span>
+                          : <span className="badge badge-danger">Denied</span>}
+                      </td>
+                    </tr>
+                  ))}
+                  {clientRoutes.routes.length === 0 && (
+                    <tr><td colSpan={4} className="text-center text-muted py-4">No routes are registered yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={() => setClientRoutes(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}

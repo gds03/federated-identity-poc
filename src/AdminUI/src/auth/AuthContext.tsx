@@ -277,11 +277,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStorage.removeItem('oidc_admin_bypass');
 
     if (currentProv === 'auth0') {
-      try {
+            try {
         const config = getOidcConfig('auth0');
-        const endpoints = await resolveOidcEndpoints(config);
-        if (endpoints.end_session_endpoint && config.clientId) {
-          const logoutUrl = new URL(endpoints.end_session_endpoint);
+        if (config.clientId) {
+          // Always use Auth0's /v2/logout: it honors `returnTo` and sends the browser back to the app.
+          // The discovery document's end_session_endpoint (/oidc/logout) ignores `returnTo`
+          // and strands the user on Auth0's "You have successfully logged out" page.
+          // NOTE: window.location.origin must be listed in Auth0 "Allowed Logout URLs".
+          const logoutUrl = new URL(`${config.authority.replace(/\/+$/, '')}/v2/logout`);
           logoutUrl.searchParams.set('client_id', config.clientId);
           logoutUrl.searchParams.set('returnTo', window.location.origin);
           window.location.href = logoutUrl.toString();

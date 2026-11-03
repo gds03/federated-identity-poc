@@ -18,6 +18,16 @@ export interface PermissionItem {
   isActive: boolean;
 }
 
+export interface RouteItem {
+  id: string;
+  method: string;
+  pathPattern: string;
+  permissionId: string | null;
+  scope: string | null;
+  description: string;
+  isActive: boolean;
+}
+
 export interface ApiItem {
   id: string;
   name: string;
@@ -25,6 +35,28 @@ export interface ApiItem {
   description: string;
   isActive: boolean;
   permissions: PermissionItem[];
+  routes: RouteItem[];
+}
+
+export interface EffectiveRoute {
+  apiId: string;
+  apiName: string;
+  audience: string;
+  routeId: string;
+  method: string;
+  pathPattern: string;
+  scope: string | null;
+  isPublic: boolean;
+  allowed: boolean;
+  reason: string;
+}
+
+export interface ClientRoutesResult {
+  id: string;
+  clientId: string;
+  clientName: string;
+  isActive: boolean;
+  routes: EffectiveRoute[];
 }
 
 export interface MatrixData {
@@ -44,8 +76,9 @@ export interface MatrixData {
 export interface AccessCheckResult {
   allowed: boolean;
   reason: string;
-  requiredScope: string;
+    requiredScope: string;
   clientScopes: string[];
+  matchedRoute?: string | null;
 }
 
 export interface AuditLogItem {

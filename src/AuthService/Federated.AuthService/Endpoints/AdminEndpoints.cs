@@ -146,8 +146,7 @@ public static class AdminEndpoints
         // ==========================================
         group.MapGet("/apis", async (AuthDbContext db) =>
         {
-            var apis = await db.Apis
-                .Include(a => a.Permissions)
+                        var apis = await db.Apis
                 .OrderBy(a => a.Name)
                 .Select(a => new
                 {
@@ -162,7 +161,19 @@ public static class AdminEndpoints
                         p.Scope,
                         p.Description,
                         p.IsActive
-                    })
+                    }),
+                    Routes = a.Routes
+                        .OrderBy(r => r.PathPattern).ThenBy(r => r.Method)
+                        .Select(r => new
+                        {
+                            r.Id,
+                            r.Method,
+                            r.PathPattern,
+                            r.PermissionId,
+                            Scope = r.Permission != null ? r.Permission.Scope : null,
+                            r.Description,
+                            r.IsActive
+                        })
                 })
                 .ToListAsync();
 
@@ -285,6 +296,118 @@ public static class AdminEndpoints
             return Results.Ok(perm);
         }).RequireAuthorization(AdminPolicies.Write);
 
+                // ==========================================
+        // 2b. API ROUTES (which route needs which permission)
+        // ==========================================
+        group.MapPost("/apis/{id}/routes", async (string id, CreateRouteDto dto, AuthDbContext db) =>
+        {
+            var api = await db.Apis.FindAsync(id);
+            if (api == null) return Results.NotFound(new { message = "API not found." });
+
+            string? permissionId = string.IsNullOrWhiteSpace(dto.PermissionId) ? null : dto.PermissionId;
+
+            var error = await ValidateRouteAsync(db, api, dto.Method, dto.PathPattern, permissionId, null);
+            if (error != null) return Results.BadRequest(new { message = error });
+
+            var route = new ApiRoute
+            {
+                ApiId = api.Id,
+                Method = RoutePatternMatcher.NormalizeMethod(dto.Method),
+                PathPattern = RoutePatternMatcher.NormalizePath(dto.PathPattern),
+                PermissionId = permissionId,
+                Description = dto.Description?.Trim() ?? string.Empty,
+                IsActive = true
+            };
+
+            string? scope = permissionId == null ? null
+                : (await db.Permissions.FindAsync(permissionId))?.Scope;
+
+            db.ApiRoutes.Add(route);
+            db.AuditEntries.Add(new AuditEntry
+            {
+                Actor = dto.Actor ?? "admin",
+                Action = "CREATE_ROUTE",
+                EntityType = "Route",
+                EntityId = $"{api.Audience}:{route.Method} {route.PathPattern}",
+                DetailsJson = JsonSerializer.Serialize(new { ApiAudience = api.Audience, After = RouteSnapshot(route, scope) })
+            });
+
+            await db.SaveChangesAsync();
+
+            return Results.Created($"/api/admin/routes/{route.Id}", new
+            {
+                route.Id,
+                route.Method,
+                route.PathPattern,
+                route.PermissionId,
+                Scope = scope,
+                route.Description,
+                route.IsActive
+            });
+        }).RequireAuthorization(AdminPolicies.Write);
+
+        group.MapPut("/routes/{id}", async (string id, UpdateRouteDto dto, AuthDbContext db) =>
+        {
+            var route = await db.ApiRoutes
+                .Include(r => r.Api)
+                .Include(r => r.Permission)
+                .FirstOrDefaultAsync(r => r.Id == id);
+            if (route == null) return Results.NotFound(new { message = "Route not found." });
+
+            string? permissionId = string.IsNullOrWhiteSpace(dto.PermissionId) ? null : dto.PermissionId;
+
+            var error = await ValidateRouteAsync(db, route.Api!, dto.Method, dto.PathPattern, permissionId, route.Id);
+            if (error != null) return Results.BadRequest(new { message = error });
+
+            var before = RouteSnapshot(route, route.Permission?.Scope);
+
+            route.Method = RoutePatternMatcher.NormalizeMethod(dto.Method);
+            route.PathPattern = RoutePatternMatcher.NormalizePath(dto.PathPattern);
+            route.PermissionId = permissionId;
+            route.Description = dto.Description?.Trim() ?? string.Empty;
+            route.IsActive = dto.IsActive;
+
+            string? scope = permissionId == null ? null
+                : (await db.Permissions.FindAsync(permissionId))?.Scope;
+
+            db.AuditEntries.Add(new AuditEntry
+            {
+                Actor = dto.Actor ?? "admin",
+                Action = "UPDATE_ROUTE",
+                EntityType = "Route",
+                EntityId = $"{route.Api!.Audience}:{route.Method} {route.PathPattern}",
+                DetailsJson = JsonSerializer.Serialize(new
+                {
+                    ApiAudience = route.Api.Audience,
+                    Before = before,
+                    After = RouteSnapshot(route, scope)
+                })
+            });
+
+            await db.SaveChangesAsync();
+
+            return Results.Ok(new
+            {
+                route.Id,
+                route.Method,
+                route.PathPattern,
+                route.PermissionId,
+                Scope = scope,
+                route.Description,
+                route.IsActive
+            });
+        }).RequireAuthorization(AdminPolicies.Write);
+
+        // Effective routes for one client: every active route, flagged allowed / denied.
+        group.MapGet("/clients/{id}/routes", async (string id, AuthDbContext db, IRouteAccessEvaluator evaluator) =>
+        {
+            var client = await db.Clients.FindAsync(id);
+            if (client == null) return Results.NotFound(new { message = "Client not found." });
+
+            var routes = await evaluator.GetEffectiveRoutesAsync(client);
+            return Results.Ok(new { client.Id, client.ClientId, client.ClientName, client.IsActive, Routes = routes });
+        }).RequireAuthorization(AdminPolicies.Read);
+
         // ==========================================
         // 3. ACCESS MATRIX
         // ==========================================
@@ -387,76 +510,17 @@ public static class AdminEndpoints
         // ==========================================
         // 4. ACCESS CHECKER
         // ==========================================
-        group.MapPost("/check-access", async (AccessCheckRequestDto req, AuthDbContext db) =>
+                // Uses the exact same evaluator as the runtime POST /check, so the simulator can never drift from real behavior.
+        group.MapPost("/check-access", async (AccessCheckRequestDto req, IRouteAccessEvaluator evaluator) =>
         {
-            var client = await db.Clients
-                .Include(c => c.Grants)
-                    .ThenInclude(g => g.Permission)
-                        .ThenInclude(p => p!.Api)
-                .FirstOrDefaultAsync(c => c.ClientId == req.ClientId);
-
-            if (client == null)
-            {
-                return Results.Ok(new AccessCheckResponseDto(
-                    Allowed: false,
-                    Reason: $"Client '{req.ClientId}' does not exist.",
-                    RequiredScope: "unknown",
-                    ClientScopes: Array.Empty<string>()));
-            }
-
-            if (!client.IsActive)
-            {
-                return Results.Ok(new AccessCheckResponseDto(
-                    Allowed: false,
-                    Reason: $"Client '{req.ClientId}' is currently disabled.",
-                    RequiredScope: "unknown",
-                    ClientScopes: Array.Empty<string>()));
-            }
-
-            var api = await db.Apis.FirstOrDefaultAsync(a => a.Audience == req.ApiAudience);
-            if (api == null || !api.IsActive)
-            {
-                return Results.Ok(new AccessCheckResponseDto(
-                    Allowed: false,
-                    Reason: $"Target API with audience '{req.ApiAudience}' is not registered or is inactive.",
-                    RequiredScope: "unknown",
-                    ClientScopes: Array.Empty<string>()));
-            }
-
-            // Determine required scope by route and HTTP method
-            string requiredScope = DetermineRequiredScope(req.ApiAudience, req.Route, req.Method);
-
-            var clientActiveScopes = client.Grants
-                .Where(g => g.Permission != null && g.Permission.IsActive && g.Permission.Api != null && g.Permission.Api.IsActive)
-                .Select(g => g.Permission!.Scope)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            if (requiredScope == "none")
-            {
-                return Results.Ok(new AccessCheckResponseDto(
-                    Allowed: true,
-                    Reason: "Route is publicly accessible / anonymous.",
-                    RequiredScope: "none",
-                    ClientScopes: clientActiveScopes));
-            }
-
-            bool hasScope = clientActiveScopes.Contains(requiredScope, StringComparer.OrdinalIgnoreCase);
-
-            if (!hasScope)
-            {
-                return Results.Ok(new AccessCheckResponseDto(
-                    Allowed: false,
-                    Reason: $"Client lacks required scope '{requiredScope}'. Possessed scopes: [{string.Join(", ", clientActiveScopes)}].",
-                    RequiredScope: requiredScope,
-                    ClientScopes: clientActiveScopes));
-            }
+            var decision = await evaluator.EvaluateAsync(req.ClientId, req.ApiAudience, req.Route, req.Method);
 
             return Results.Ok(new AccessCheckResponseDto(
-                Allowed: true,
-                Reason: $"Access allowed. Client holds valid grant for scope '{requiredScope}'.",
-                RequiredScope: requiredScope,
-                ClientScopes: clientActiveScopes));
+                decision.Allowed,
+                decision.Reason,
+                decision.RequiredScope,
+                decision.ClientScopes,
+                decision.MatchedRoute));
         }).RequireAuthorization(AdminPolicies.Read);
 
         // ==========================================
@@ -475,30 +539,44 @@ public static class AdminEndpoints
         return app;
     }
 
-    private static string DetermineRequiredScope(string audience, string route, string method)
+        private static readonly string[] ValidationMethods = RoutePatternMatcher.AllowedMethods;
+
+    /// <summary>Validates a route definition against its API. Returns an error message or null.</summary>
+    private static async Task<string?> ValidateRouteAsync(
+        AuthDbContext db, Api api, string method, string pathPattern, string? permissionId, string? excludeRouteId)
     {
-        string normRoute = route.Trim().ToLowerInvariant();
-        string normMethod = method.Trim().ToUpperInvariant();
-
-        if (normRoute == "/health") return "none";
-
-        if (audience.Contains("orders"))
+        if (!RoutePatternMatcher.IsValidMethod(method))
         {
-            if (normMethod == "GET") return "orders.read";
-            if (normMethod == "POST" || normMethod == "PUT" || normMethod == "DELETE") return "orders.write";
-        }
-        else if (audience.Contains("customers"))
-        {
-            if (normMethod == "GET") return "customers.read";
-        }
-        else if (audience.Contains("inventory"))
-        {
-            if (normMethod == "GET") return "inventory.read";
-            if (normMethod == "PUT" || normMethod == "POST") return "inventory.write";
+            return $"Method must be one of: {string.Join(", ", ValidationMethods)}.";
         }
 
-        return $"{normRoute.TrimStart('/').Split('/')[0]}.read";
+        var patternError = RoutePatternMatcher.Validate(pathPattern);
+        if (patternError != null) return patternError;
+
+        if (!string.IsNullOrWhiteSpace(permissionId))
+        {
+            var perm = await db.Permissions.FirstOrDefaultAsync(p => p.Id == permissionId);
+            if (perm == null) return "Permission not found.";
+            if (perm.ApiId != api.Id) return $"Permission '{perm.Scope}' does not belong to API '{api.Name}'.";
+        }
+
+        string normMethod = RoutePatternMatcher.NormalizeMethod(method);
+        string normPattern = RoutePatternMatcher.NormalizePath(pathPattern);
+        bool duplicate = await db.ApiRoutes.AnyAsync(r =>
+            r.ApiId == api.Id && r.Method == normMethod && r.PathPattern == normPattern && r.Id != excludeRouteId);
+        if (duplicate) return $"Route '{normMethod} {normPattern}' already exists for this API.";
+
+        return null;
     }
+
+    private static object RouteSnapshot(ApiRoute r, string? scope) => new
+    {
+        r.Method,
+        r.PathPattern,
+        Scope = scope,
+        Public = r.PermissionId == null,
+        r.IsActive
+    };
 }
 
 public record CreateClientDto(string ClientId, string ClientName, string? Actor);
@@ -510,4 +588,6 @@ public record CreatePermissionDto(string Scope, string? Description, string? Act
 public record UpdatePermissionDto(string? Description, bool IsActive, string? Actor);
 public record ToggleGrantDto(string ClientId, string PermissionId, bool Enable, string? Actor);
 public record AccessCheckRequestDto(string ClientId, string ApiAudience, string Route, string Method);
-public record AccessCheckResponseDto(bool Allowed, string Reason, string RequiredScope, IEnumerable<string> ClientScopes);
+public record AccessCheckResponseDto(bool Allowed, string Reason, string RequiredScope, IEnumerable<string> ClientScopes, string? MatchedRoute = null);
+public record CreateRouteDto(string Method, string PathPattern, string? PermissionId, string? Description, string? Actor);
+public record UpdateRouteDto(string Method, string PathPattern, string? PermissionId, string? Description, bool IsActive, string? Actor);

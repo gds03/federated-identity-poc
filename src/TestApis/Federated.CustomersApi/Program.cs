@@ -46,7 +46,7 @@ app.UseTransactionId();
 
 if (authMode.Equals("CentralCheck", StringComparison.OrdinalIgnoreCase))
 {
-    app.UseCentralCheck();
+    app.UseCentralCheck(audience);
 }
 else
 {

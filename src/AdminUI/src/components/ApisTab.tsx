@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '../api';
-import type { ApiItem } from '../types';
+import type { ApiItem, RouteItem } from '../types';
 import { useAuth } from '../auth/AuthContext';
-import { Server, Plus, RefreshCw, Key, Globe, Lock } from 'lucide-react';
+import { Server, Plus, RefreshCw, Key, Globe, Lock, Route as RouteIcon } from 'lucide-react';
+
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', '*'];
 
 export const ApisTab: React.FC = () => {
   const { isReadOnly, token } = useAuth();
@@ -22,6 +24,14 @@ export const ApisTab: React.FC = () => {
   const [scopeName, setScopeName] = useState('');
   const [scopeDesc, setScopeDesc] = useState('');
   const [creatingScope, setCreatingScope] = useState(false);
+
+  // New Route modal
+  const [selectedApiForRoute, setSelectedApiForRoute] = useState<ApiItem | null>(null);
+  const [routeMethod, setRouteMethod] = useState('GET');
+  const [routePath, setRoutePath] = useState('');
+  const [routePermissionId, setRoutePermissionId] = useState(''); // '' = public
+  const [routeDesc, setRouteDesc] = useState('');
+  const [creatingRoute, setCreatingRoute] = useState(false);
 
   const loadApis = async () => {
     try {
@@ -75,12 +85,61 @@ export const ApisTab: React.FC = () => {
     }
   };
 
+    const openRouteModal = (api: ApiItem) => {
+    setSelectedApiForRoute(api);
+    setRouteMethod('GET');
+    setRoutePath('');
+    setRoutePermissionId(api.permissions[0]?.id ?? '');
+    setRouteDesc('');
+  };
+
+  const handleCreateRoute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedApiForRoute || !routePath) return;
+    try {
+      setCreatingRoute(true);
+      await adminApi.createRoute(
+        selectedApiForRoute.id,
+        routeMethod,
+        routePath.trim(),
+        routePermissionId || null,
+        routeDesc
+      );
+      setSelectedApiForRoute(null);
+      loadApis();
+    } catch (err: any) {
+      alert(`Error creating route: ${err.message}`);
+    } finally {
+      setCreatingRoute(false);
+    }
+  };
+
+  const handleToggleRoute = async (route: RouteItem) => {
+    const action = route.isActive ? 'disable' : 'enable';
+    if (!confirm(`Are you sure you want to ${action} route '${route.method} ${route.pathPattern}'?`)) return;
+    try {
+      await adminApi.updateRoute(route.id, {
+        method: route.method,
+        pathPattern: route.pathPattern,
+        permissionId: route.permissionId,
+        description: route.description,
+        isActive: !route.isActive,
+      });
+      loadApis();
+    } catch (err: any) {
+      alert(`Error updating route: ${err.message}`);
+    }
+  };
+
   return (
     <div className="tab-pane">
       <div className="section-header">
         <div>
-          <h2>APIs & Permissions</h2>
-          <p className="subtitle">Register resource servers (audiences) and define granular OAuth scopes.</p>
+          <h2>APIs, Scopes & Routes</h2>
+          <p className="subtitle">
+            Register resource servers (audiences), define OAuth scopes, and declare which route requires which scope.
+            Routes that are not registered are denied by default.
+          </p>
         </div>
         <div className="actions">
           <button className="btn btn-secondary" onClick={loadApis} disabled={loading}>
@@ -147,8 +206,50 @@ export const ApisTab: React.FC = () => {
                     <span className="text-xs text-muted">{perm.description || 'No description'}</span>
                   </div>
                 ))}
-                {api.permissions.length === 0 && (
+                                {api.permissions.length === 0 && (
                   <div className="text-xs text-muted py-2 italic">No scopes registered for this API yet.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="api-permissions-section">
+              <div className="permissions-header">
+                <span className="text-xs uppercase font-bold text-muted">Routes ({api.routes.length})</span>
+                <button
+                  className="btn btn-sm btn-outline"
+                  onClick={() => openRouteModal(api)}
+                  disabled={isReadOnly}
+                  title={isReadOnly ? "Requires 'access-admin' role" : undefined}
+                >
+                  <Plus size={12} /> Add Route
+                </button>
+              </div>
+
+              <div className="permissions-list">
+                {api.routes.map((route) => (
+                  <div key={route.id} className="permission-item" style={route.isActive ? undefined : { opacity: 0.5 }}>
+                    <div className="permission-main">
+                      <RouteIcon size={14} className="text-accent" />
+                      <span className="mono font-bold text-sm">{route.method} {route.pathPattern}</span>
+                    </div>
+                    <span className="text-xs text-muted">
+                      {route.scope ? <>requires <code className="mono">{route.scope}</code></> : 'public (no scope)'}
+                      {route.description ? ` — ${route.description}` : ''}
+                    </span>
+                    <button
+                      className="btn btn-sm btn-outline"
+                      onClick={() => handleToggleRoute(route)}
+                      disabled={isReadOnly}
+                      title={isReadOnly ? "Requires 'access-admin' role" : undefined}
+                    >
+                      {route.isActive ? 'Disable' : 'Enable'}
+                    </button>
+                  </div>
+                ))}
+                {api.routes.length === 0 && (
+                  <div className="text-xs text-muted py-2 italic">
+                    No routes registered: every request to this API is denied by default.
+                  </div>
                 )}
               </div>
             </div>
@@ -200,6 +301,68 @@ export const ApisTab: React.FC = () => {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creatingApi}>
                   {creatingApi ? 'Registering...' : 'Register API'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Route Modal */}
+      {selectedApiForRoute && (
+        <div className="modal-backdrop">
+          <div className="modal-content">
+            <h3>Add Route to {selectedApiForRoute.name}</h3>
+            <p className="text-muted text-sm mb-4">
+              Clients may call this route only if they hold the selected scope. Use <code className="mono">{'{id}'}</code> for
+              one path segment, <code className="mono">*</code> for any one segment, and a trailing <code className="mono">/**</code> for
+              everything below a path.
+            </p>
+            <form onSubmit={handleCreateRoute}>
+              <div className="form-row">
+                <div className="form-group flex-1">
+                  <label>HTTP Method</label>
+                  <select value={routeMethod} onChange={(e) => setRouteMethod(e.target.value)}>
+                    {HTTP_METHODS.map((m) => (
+                      <option key={m} value={m}>{m === '*' ? '* (any method)' : m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group flex-2">
+                  <label>Path Pattern</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. /orders/{id}"
+                    value={routePath}
+                    onChange={(e) => setRoutePath(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Required Scope</label>
+                <select value={routePermissionId} onChange={(e) => setRoutePermissionId(e.target.value)}>
+                  <option value="">None (public route)</option>
+                  {selectedApiForRoute.permissions.map((p) => (
+                    <option key={p.id} value={p.id}>{p.scope}{p.isActive ? '' : ' [disabled]'}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Create an order"
+                  value={routeDesc}
+                  onChange={(e) => setRouteDesc(e.target.value)}
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setSelectedApiForRoute(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={creatingRoute}>
+                  {creatingRoute ? 'Adding...' : 'Add Route'}
                 </button>
               </div>
             </form>

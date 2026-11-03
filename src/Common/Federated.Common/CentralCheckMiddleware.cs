@@ -12,6 +12,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Federated.Common;
 
+/// <summary>Explicit settings for <see cref="CentralCheckMiddleware"/> (override configuration).</summary>
+public class CentralCheckOptions
+{
+    /// <summary>The audience (registered API) this service represents in the central route registry.</summary>
+    public string? Audience { get; set; }
+}
+
 public class CentralCheckMiddleware
 {
     private readonly RequestDelegate _next;
@@ -24,6 +31,7 @@ public class CentralCheckMiddleware
         RequestDelegate next,
         IConfiguration config,
         ILogger<CentralCheckMiddleware> logger,
+        CentralCheckOptions options,
         IHttpClientFactory? httpClientFactory = null)
     {
         _next = next;
@@ -32,7 +40,9 @@ public class CentralCheckMiddleware
 
         string authority = config["Authentication:Authority"] ?? "http://localhost:5001";
         _checkUrl = $"{authority.TrimEnd('/')}/check";
-        _audience = config["Authentication:Audience"] ?? string.Empty;
+        _audience = !string.IsNullOrWhiteSpace(options.Audience)
+            ? options.Audience
+            : config["Authentication:Audience"] ?? string.Empty;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -144,12 +154,17 @@ public record CheckResponseDto(
     string Reason,
     string ClientId,
     string RequiredScope,
-    IEnumerable<string> ClientScopes);
+        IEnumerable<string> ClientScopes,
+    string? MatchedRoute = null);
 
 public static class CentralCheckMiddlewareExtensions
 {
-    public static IApplicationBuilder UseCentralCheck(this IApplicationBuilder app)
+        /// <param name="audience">
+    /// Audience of the API being protected, as registered in the AuthService route registry.
+    /// Falls back to the "Authentication:Audience" configuration value when omitted.
+    /// </param>
+    public static IApplicationBuilder UseCentralCheck(this IApplicationBuilder app, string? audience = null)
     {
-        return app.UseMiddleware<CentralCheckMiddleware>();
+        return app.UseMiddleware<CentralCheckMiddleware>(new CentralCheckOptions { Audience = audience });
     }
 }

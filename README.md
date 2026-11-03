@@ -119,7 +119,7 @@ Each test API can be toggled between two architectural patterns in its `appsetti
 ## Admin UI Screens
 
 1. **Clients**: Register client applications with high-entropy secrets (displayed once, saved as PBKDF2 hashes), disable/enable clients, rotate secrets.
-2. **APIs & Scopes**: Register resource servers and define granular OAuth scopes.
+2. **APIs, Scopes & Routes**: Register resource servers, define granular OAuth scopes, and register each API's routes (`METHOD + path pattern`) with the scope they require. `POST /check` is **default-deny**: a call is allowed only if it matches an active registered route and the client holds that route's scope (a route with no scope is public). Patterns support `{id}` (one segment), `*` (one segment) and a trailing `/**`; the most specific match wins. A newly registered API denies everything until its routes are added. The **Clients** tab shows the effective routes per client.
 3. **Access Matrix**: Grid mapping Clients (rows) to Scopes (columns). Toggling a grant triggers a **confirmation modal displaying the exact diff** before applying.
 4. **Access Checker**: Interactive policy simulator to test if any `(Client, API, Route, Method)` is allowed or denied and why.
 5. **Audit Log**: Immutable chronological timeline of who changed what, when, and the JSON diff details.

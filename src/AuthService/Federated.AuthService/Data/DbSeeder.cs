@@ -100,6 +100,22 @@ public static class DbSeeder
             DetailsJson = "{\"message\":\"Initial seed of default APIs, permissions, and clients created.\"}"
         });
 
+                                // 6. Routes exposed by the sample APIs, each tied to the scope it requires (null = public)
+        db.ApiRoutes.AddRange(
+            new ApiRoute { ApiId = ordersApi.Id, Method = "GET", PathPattern = "/health", PermissionId = null, Description = "Health check (public)" },
+            new ApiRoute { ApiId = ordersApi.Id, Method = "GET", PathPattern = "/orders", PermissionId = permOrdersRead.Id, Description = "List orders" },
+            new ApiRoute { ApiId = ordersApi.Id, Method = "GET", PathPattern = "/orders/{id}", PermissionId = permOrdersRead.Id, Description = "Get one order" },
+            new ApiRoute { ApiId = ordersApi.Id, Method = "POST", PathPattern = "/orders", PermissionId = permOrdersWrite.Id, Description = "Create an order" },
+
+            new ApiRoute { ApiId = customersApi.Id, Method = "GET", PathPattern = "/health", PermissionId = null, Description = "Health check (public)" },
+            new ApiRoute { ApiId = customersApi.Id, Method = "GET", PathPattern = "/customers", PermissionId = permCustRead.Id, Description = "List customers" },
+            new ApiRoute { ApiId = customersApi.Id, Method = "GET", PathPattern = "/customers/{id}", PermissionId = permCustRead.Id, Description = "Get one customer" },
+
+            new ApiRoute { ApiId = inventoryApi.Id, Method = "GET", PathPattern = "/health", PermissionId = null, Description = "Health check (public)" },
+            new ApiRoute { ApiId = inventoryApi.Id, Method = "GET", PathPattern = "/inventory", PermissionId = permInvRead.Id, Description = "List inventory" },
+            new ApiRoute { ApiId = inventoryApi.Id, Method = "PUT", PathPattern = "/inventory/{id}", PermissionId = permInvWrite.Id, Description = "Update stock level" }
+        );
+
         await db.SaveChangesAsync();
     }
 }
